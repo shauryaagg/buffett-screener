@@ -2,7 +2,7 @@
 import logging
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from core.models import CompanyInfo, FilterResult
+from core.models import CompanyInfo, FilterResult, PipelineStatus
 from core.database import Database
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ class FilterBase(ABC):
 
                 # Update pipeline state
                 self.db.update_pipeline_status(
-                    run_id, "running",
+                    run_id, PipelineStatus.RUNNING,
                     current_filter=self.filter_num,
                     current_ticker_idx=i + 1
                 )
