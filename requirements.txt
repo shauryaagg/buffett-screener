@@ -1,0 +1,7 @@
+edgartools>=3.0
+claude-code-sdk
+typer[all]
+pydantic>=2.0
+pandas
+requests
+python-dotenv
