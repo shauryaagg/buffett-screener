@@ -86,7 +86,7 @@ class ManagementQualityFilter(FilterBase):
             for name, result in zip(task_names, results):
                 if isinstance(result, Exception):
                     error_str = str(result).lower()
-                    if "rate_limit" in error_str or "token" in error_str or "overloaded" in error_str:
+                    if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
                         raise result
                     logger.warning(f"  {company.ticker}: {name} analysis failed: {result}")
                     continue
@@ -95,21 +95,33 @@ class ManagementQualityFilter(FilterBase):
                 elif name == "mda":
                     mda_result = result
 
-        # Step 5: Synthesize scores
-        risk_honesty = float(risk_result.get("risk_honesty", 5))
+        # Step 5: Synthesize scores — incorporate all available dimensions
+        # Business agent: average all sub-scores
+        moat_articulation = float(business_result.get("moat_articulation", 5))
+        honest_self = float(business_result.get("honest_self_assessment", 5))
+        business_avg = (business_clarity + moat_articulation + honest_self) / 3
 
+        # Risk agent: average all sub-scores
+        risk_honesty_raw = float(risk_result.get("risk_honesty", 5))
+        risk_specificity = float(risk_result.get("specificity", 5))
+        risk_quantification = float(risk_result.get("quantification", 5))
+        risk_avg = (risk_honesty_raw + risk_specificity + risk_quantification) / 3
+
+        # MDA agent: average all sub-scores
         kpi_quality = float(mda_result.get("kpi_quality", 5))
         mda_transparency = float(mda_result.get("transparency", 5))
-        tone_authenticity = float(mda_result.get("forward_looking_honesty",
-                                   mda_result.get("explanation_quality", 5)))
+        explanation_quality = float(mda_result.get("explanation_quality", 5))
+        capital_discussion = float(mda_result.get("capital_allocation_discussion", 5))
+        forward_honesty = float(mda_result.get("forward_looking_honesty", 5))
+        tone_authenticity = (explanation_quality + forward_honesty) / 2
 
         def clamp(v): return max(0.0, min(10.0, v))
 
         scores = ManagementQualityScore(
-            business_clarity=clamp(business_clarity),
-            risk_honesty=clamp(risk_honesty),
+            business_clarity=clamp(business_avg),
+            risk_honesty=clamp(risk_avg),
             mda_transparency=clamp(mda_transparency),
-            kpi_quality=clamp(kpi_quality),
+            kpi_quality=clamp((kpi_quality + capital_discussion) / 2),
             tone_authenticity=clamp(tone_authenticity),
         )
 

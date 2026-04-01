@@ -83,6 +83,7 @@ class PipelineState(BaseModel):
     paused_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     status: PipelineStatus = PipelineStatus.RUNNING
+    ticker_limit: Optional[int] = None
 
 
 class FullAnalysis(BaseModel):

@@ -61,7 +61,7 @@ class FilterBase(ABC):
 
             except Exception as e:
                 error_str = str(e).lower()
-                if "rate_limit" in error_str or "token" in error_str or "overloaded" in error_str:
+                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
                     logger.warning(f"  Rate limit hit at {company.ticker}. Raising for pipeline to handle.")
                     raise
 

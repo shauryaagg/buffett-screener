@@ -50,7 +50,7 @@ class CapitalAllocationFilter(FilterBase):
                 mda_summaries.append(f"--- {filing_date} ---\n{summary}")
             except Exception as e:
                 error_str = str(e).lower()
-                if "rate_limit" in error_str or "token" in error_str or "overloaded" in error_str:
+                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
                     raise
                 logger.warning(f"  {company.ticker}: error summarizing {filing_date} MD&A: {e}")
                 mda_summaries.append(f"--- {filing_date} ---\n[Error extracting summary]")
@@ -94,6 +94,7 @@ class CapitalAllocationFilter(FilterBase):
                 "capital_return": scores.capital_return,
                 "acquisition_quality": scores.acquisition_quality,
                 "debt_management": scores.debt_management,
+                "reinvestment_quality": scores.reinvestment_quality,
             }
         )
 

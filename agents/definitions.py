@@ -51,7 +51,7 @@ async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Di
 
     except Exception as e:
         error_str = str(e).lower()
-        if "rate_limit" in error_str or "token" in error_str or "overloaded" in error_str:
+        if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
             raise  # Let the pipeline handle rate limits
         logger.error(f"Agent error: {e}")
         return {"error": str(e)}
@@ -68,17 +68,20 @@ def _extract_json(text: str) -> Dict[str, Any]:
 
     # Try extracting from markdown code block
     if "```json" in text:
-        start = text.index("```json") + 7
-        end = text.index("```", start)
-        return json.loads(text[start:end].strip())
+        try:
+            start = text.index("```json") + 7
+            end = text.index("```", start)
+            return json.loads(text[start:end].strip())
+        except (json.JSONDecodeError, ValueError):
+            pass
 
     if "```" in text:
-        start = text.index("```") + 3
-        end = text.index("```", start)
-        candidate = text[start:end].strip()
         try:
+            start = text.index("```") + 3
+            end = text.index("```", start)
+            candidate = text[start:end].strip()
             return json.loads(candidate)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, ValueError):
             pass
 
     # Try finding JSON object in text
@@ -123,6 +126,9 @@ async def run_capital_allocation_analysis(mda_summaries: str, financial_trends: 
 async def summarize_mda_for_capital(mda_text: str, year: str) -> str:
     """Extract capital allocation commentary from a single year's MD&A. Uses Sonnet."""
     result = await run_agent(MDA_SUMMARY_PROMPT, f"Year: {year}\n\n{mda_text}", model="sonnet")
+    if "error" in result and "raw_text" in result:
+        # Agent returned plain text (not JSON) — that's fine for summaries
+        return result["raw_text"]
     if "error" in result:
         return f"[Error summarizing {year} MD&A]"
     return result.get("summary", result.get("reasoning", json.dumps(result)))

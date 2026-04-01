@@ -41,7 +41,7 @@ class ValuationFilter(FilterBase):
 
         # Get current price
         price = company.price
-        if not price:
+        if not price and self.market_data:
             quote = self.market_data.get_single_quote(company.ticker)
             if quote:
                 price = quote["price"]

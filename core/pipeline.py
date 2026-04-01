@@ -73,6 +73,7 @@ class Pipeline:
             current_ticker_idx=0,
             started_at=datetime.now(),
             status=PipelineStatus.RUNNING,
+            ticker_limit=limit,
         )
         self.db.save_pipeline_state(state)
 
@@ -150,6 +151,8 @@ class Pipeline:
         # Rebuild company list for current position
         if state.current_filter == 1:
             current_companies = self.filters[0].build_universe()
+            if state.ticker_limit:
+                current_companies = current_companies[:state.ticker_limit]
         else:
             prev_tickers = self.db.get_passed_tickers(run_id, state.current_filter - 1)
             current_companies = self._rebuild_companies(prev_tickers)
@@ -254,7 +257,8 @@ class Pipeline:
                 )
             except Exception:
                 pass
-        logger.info(f"  Result: {'PASS' if f2_result.passed else 'FAIL'} (score: {f2_result.score:.1f})")
+        score_str = f" (score: {f2_result.score:.1f})" if f2_result.score is not None else ""
+        logger.info(f"  Result: {'PASS' if f2_result.passed else 'FAIL'}{score_str}")
         logger.info(f"  Reason: {f2_result.reasoning[:200]}")
 
         if not f2_result.passed:
@@ -303,11 +307,12 @@ class Pipeline:
                     capital_return=f4_result.details.get("capital_return", 5),
                     acquisition_quality=f4_result.details.get("acquisition_quality", 5),
                     debt_management=f4_result.details.get("debt_management", 5),
-                    reinvestment_quality=5,
+                    reinvestment_quality=f4_result.details.get("reinvestment_quality", 5),
                 )
             except Exception:
                 pass
-        logger.info(f"  Result: {'PASS' if f4_result.passed else 'FAIL'} (score: {f4_result.score:.1f})")
+        score_str = f" (score: {f4_result.score:.1f})" if f4_result.score is not None else ""
+        logger.info(f"  Result: {'PASS' if f4_result.passed else 'FAIL'}{score_str}")
 
         analysis.final_passed = f4_result.passed
 
@@ -371,7 +376,7 @@ class Pipeline:
 
 def _is_rate_limit_error(exc: Exception) -> bool:
     error_str = str(exc).lower()
-    return any(term in error_str for term in ("rate_limit", "token", "overloaded"))
+    return any(term in error_str for term in ("rate_limit", "rate limit", "429", "overloaded"))
 
 
 def _log_run_summary(db: Database, run_id: str):

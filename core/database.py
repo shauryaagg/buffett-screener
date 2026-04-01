@@ -34,7 +34,8 @@ class Database:
                     started_at TEXT,
                     paused_at TEXT,
                     completed_at TEXT,
-                    status TEXT
+                    status TEXT,
+                    ticker_limit INTEGER
                 )
             """)
             conn.execute("""
@@ -54,6 +55,7 @@ class Database:
                     f4_passed BOOLEAN, f4_score REAL,
                     f4_buyback_quality REAL, f4_capital_return REAL,
                     f4_acquisition_quality REAL, f4_debt_management REAL,
+                    f4_reinvestment_quality REAL,
                     f4_reasoning TEXT,
                     final_passed BOOLEAN,
                     analyzed_at TEXT,
@@ -78,8 +80,8 @@ class Database:
         with self._conn() as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO pipeline_state
-                    (run_id, current_filter, current_ticker_idx, started_at, paused_at, completed_at, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (run_id, current_filter, current_ticker_idx, started_at, paused_at, completed_at, status, ticker_limit)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 state.run_id,
                 state.current_filter,
@@ -88,6 +90,7 @@ class Database:
                 state.paused_at.isoformat() if state.paused_at else None,
                 state.completed_at.isoformat() if state.completed_at else None,
                 state.status.value,
+                state.ticker_limit,
             ))
 
     def load_pipeline_state(self, run_id: str) -> Optional[PipelineState]:
@@ -105,6 +108,7 @@ class Database:
             paused_at=datetime.fromisoformat(row["paused_at"]) if row["paused_at"] else None,
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
             status=PipelineStatus(row["status"]),
+            ticker_limit=row["ticker_limit"] if "ticker_limit" in row.keys() else None,
         )
 
     def update_pipeline_status(self, run_id: str, status: PipelineStatus, **kwargs):
@@ -143,6 +147,7 @@ class Database:
             "f4_passed", "f4_score",
             "f4_buyback_quality", "f4_capital_return",
             "f4_acquisition_quality", "f4_debt_management",
+            "f4_reinvestment_quality",
             "f4_reasoning",
             "final_passed", "analyzed_at",
         ]
