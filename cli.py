@@ -82,7 +82,7 @@ def analyze(
 
     if result.f2_result:
         status = "PASS" if result.f2_result.passed else "FAIL"
-        score = f" ({result.f2_result.score:.1f}/100)" if result.f2_result.score else ""
+        score = f" ({result.f2_result.score:.1f}/100)" if result.f2_result.score is not None else ""
         typer.echo(f"\nFilter 2 (Management Quality): {status}{score}")
         if result.f2_scores:
             typer.echo(f"  Business Clarity: {result.f2_scores.business_clarity:.1f}/10")
@@ -106,7 +106,7 @@ def analyze(
 
     if result.f4_result:
         status = "PASS" if result.f4_result.passed else "FAIL"
-        score = f" ({result.f4_result.score:.1f}/100)" if result.f4_result.score else ""
+        score = f" ({result.f4_result.score:.1f}/100)" if result.f4_result.score is not None else ""
         typer.echo(f"\nFilter 4 (Capital Allocation): {status}{score}")
         if result.f4_scores:
             typer.echo(f"  Buyback Quality: {result.f4_scores.buyback_quality:.1f}/10")

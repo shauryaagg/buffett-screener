@@ -5,3 +5,5 @@ pydantic>=2.0
 pandas
 requests
 python-dotenv
+pytest>=8.0
+pytest-asyncio>=0.23

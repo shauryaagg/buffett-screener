@@ -57,7 +57,10 @@ class ManagementQualityFilter(FilterBase):
             business_result = await analyze_business_description(item1[:50000])
 
         # Step 3: Early exit if business clarity is very low
-        business_clarity = float(business_result.get("business_clarity", 5))
+        try:
+            business_clarity = float(business_result.get("business_clarity", 5)) if business_result.get("business_clarity") is not None else 5.0
+        except (TypeError, ValueError):
+            business_clarity = 5.0
         if business_clarity < 3 and "error" not in business_result:
             return FilterResult(
                 passed=False,
@@ -96,23 +99,31 @@ class ManagementQualityFilter(FilterBase):
                     mda_result = result
 
         # Step 5: Synthesize scores — incorporate all available dimensions
+        def sf(val, default=5.0):
+            """Safe float conversion — handles None, non-numeric values."""
+            try:
+                return float(val) if val is not None else default
+            except (TypeError, ValueError):
+                return default
+
         # Business agent: average all sub-scores
-        moat_articulation = float(business_result.get("moat_articulation", 5))
-        honest_self = float(business_result.get("honest_self_assessment", 5))
+        moat_articulation = sf(business_result.get("moat_articulation", 5))
+        honest_self = sf(business_result.get("honest_self_assessment", 5))
+        business_clarity = sf(business_clarity)
         business_avg = (business_clarity + moat_articulation + honest_self) / 3
 
         # Risk agent: average all sub-scores
-        risk_honesty_raw = float(risk_result.get("risk_honesty", 5))
-        risk_specificity = float(risk_result.get("specificity", 5))
-        risk_quantification = float(risk_result.get("quantification", 5))
+        risk_honesty_raw = sf(risk_result.get("risk_honesty", 5))
+        risk_specificity = sf(risk_result.get("specificity", 5))
+        risk_quantification = sf(risk_result.get("quantification", 5))
         risk_avg = (risk_honesty_raw + risk_specificity + risk_quantification) / 3
 
         # MDA agent: average all sub-scores
-        kpi_quality = float(mda_result.get("kpi_quality", 5))
-        mda_transparency = float(mda_result.get("transparency", 5))
-        explanation_quality = float(mda_result.get("explanation_quality", 5))
-        capital_discussion = float(mda_result.get("capital_allocation_discussion", 5))
-        forward_honesty = float(mda_result.get("forward_looking_honesty", 5))
+        kpi_quality = sf(mda_result.get("kpi_quality", 5))
+        mda_transparency = sf(mda_result.get("transparency", 5))
+        explanation_quality = sf(mda_result.get("explanation_quality", 5))
+        capital_discussion = sf(mda_result.get("capital_allocation_discussion", 5))
+        forward_honesty = sf(mda_result.get("forward_looking_honesty", 5))
         tone_authenticity = (explanation_quality + forward_honesty) / 2
 
         def clamp(v): return max(0.0, min(10.0, v))
