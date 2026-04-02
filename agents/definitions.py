@@ -20,6 +20,46 @@ from config.prompts import (
 logger = logging.getLogger(__name__)
 
 
+_sdk_patched = False
+
+
+def _patch_sdk_message_parser():
+    """Patch claude-code-sdk to handle rate_limit_event messages.
+
+    The SDK (v0.0.25) crashes with MessageParseError on rate_limit_event
+    messages from the API. These are informational stream events sent while
+    the API waits for a rate limit to clear — the actual response follows.
+    We patch parse_message to return a SystemMessage so the generator
+    continues instead of crashing.
+
+    Must patch both the source module AND the client module, because
+    client.py does `from .message_parser import parse_message` at import
+    time (holding its own reference to the original function).
+    """
+    global _sdk_patched
+    if _sdk_patched:
+        return
+    try:
+        from claude_code_sdk._internal import message_parser, client
+        from claude_code_sdk.types import SystemMessage
+
+        _original_parse = message_parser.parse_message
+
+        def _patched_parse(data):
+            if isinstance(data, dict):
+                msg_type = data.get("type", "")
+                if msg_type in ("rate_limit_event",):
+                    logger.debug(f"SDK: skipping {msg_type} event")
+                    return SystemMessage(subtype=msg_type, data=data)
+            return _original_parse(data)
+
+        message_parser.parse_message = _patched_parse
+        client.parse_message = _patched_parse
+        _sdk_patched = True
+    except Exception as e:
+        logger.warning(f"Could not patch SDK message parser: {e}")
+
+
 async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Dict[str, Any]:
     """
     Run a Claude agent with a system prompt and user message.
@@ -32,6 +72,8 @@ async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Di
     """
     # Lazy import to avoid issues when SDK isn't installed
     from claude_code_sdk import query, ClaudeCodeOptions
+
+    _patch_sdk_message_parser()
 
     try:
         full_message = f"{prompt}\n\n---\n\nHere is the content to analyze:\n\n{user_message}"
