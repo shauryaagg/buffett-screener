@@ -64,6 +64,7 @@ def run(
 def analyze(
     ticker: str = typer.Argument(..., help="Stock ticker to analyze"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+    save: bool = typer.Option(True, "--save/--no-save", help="Save full analysis as markdown report"),
 ):
     """Run deep analysis on a single ticker."""
     pipeline = get_pipeline()
@@ -116,6 +117,11 @@ def analyze(
             typer.echo(f"  Reinvestment Quality: {result.f4_scores.reinvestment_quality:.1f}/10")
 
     typer.echo(f"\nFinal Result: {'*** PASSED ALL FILTERS ***' if result.final_passed else 'Did not pass all filters'}")
+
+    if save:
+        from core.report import save_report
+        path = save_report(result)
+        typer.echo(f"\nReport saved: {path}")
 
 
 @app.command()
