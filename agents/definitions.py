@@ -60,80 +60,83 @@ def _patch_sdk_message_parser():
         logger.warning(f"Could not patch SDK message parser: {e}")
 
 
+async def _query_once(query_fn, prompt: str, options) -> str:
+    """Run a single query and return the result text."""
+    result_text = ""
+    async for message in query_fn(prompt=prompt, options=options):
+        if hasattr(message, 'content') and message.content:
+            for block in message.content:
+                if hasattr(block, 'text'):
+                    result_text += block.text
+    return result_text
+
+
 async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Dict[str, Any]:
     """
     Run a Claude agent with a system prompt and user message.
     Returns parsed JSON from the agent's response.
 
-    Args:
-        prompt: System prompt defining the agent's role
-        user_message: The content to analyze
-        model: Model to use ("sonnet", "opus", "haiku")
+    Retries transient subprocess failures (exit code 1) up to 2 times with
+    a short delay, and real rate limits up to 3 times with exponential backoff.
     """
-    # Lazy import to avoid issues when SDK isn't installed
     from claude_code_sdk import query, ClaudeCodeOptions
 
     _patch_sdk_message_parser()
 
-    try:
-        full_message = f"{prompt}\n\n---\n\nHere is the content to analyze:\n\n{user_message}"
+    full_message = f"{prompt}\n\n---\n\nHere is the content to analyze:\n\n{user_message}"
 
-        # Map model names to full model IDs
-        model_map = {
-            "opus": "claude-opus-4-20250514",
-            "sonnet": "claude-sonnet-4-20250514",
-            "haiku": "claude-haiku-4-20250514",
-        }
-        model_id = model_map.get(model, f"claude-{model}-4-20250514")
+    # Note: Haiku is not available via Claude Code on Max subscriptions
+    model_map = {
+        "opus": "claude-opus-4-20250514",
+        "sonnet": "claude-sonnet-4-20250514",
+    }
+    model_id = model_map.get(model, f"claude-{model}-4-20250514")
+    options = ClaudeCodeOptions(model=model_id, max_turns=1)
 
-        result_text = ""
-        async for message in query(
-            prompt=full_message,
-            options=ClaudeCodeOptions(
-                model=model_id,
-                max_turns=1,
-            )
-        ):
-            # Handle different message types robustly
-            if hasattr(message, 'content') and message.content:
-                for block in message.content:
-                    if hasattr(block, 'text'):
-                        result_text += block.text
+    # Try up to 3 times total for transient subprocess failures
+    last_error = None
+    for attempt in range(3):
+        try:
+            result_text = await _query_once(query, full_message, options)
 
-        # Parse JSON from response
-        return _extract_json(result_text)
+            # Check for model availability errors returned as text
+            if result_text and "issue with" in result_text.lower():
+                logger.error(f"Model unavailable ({model_id}): {result_text[:200]}")
+                return {"error": result_text[:500]}
 
-    except Exception as e:
-        if _is_real_rate_limit(e):
-            retry_delays = [30, 60, 120]
-            for attempt, delay in enumerate(retry_delays, 1):
-                logger.warning(f"Rate limited — retry {attempt}/{len(retry_delays)} in {delay}s")
-                await asyncio.sleep(delay)
-                try:
-                    result_text = ""
-                    async for message in query(
-                        prompt=full_message,
-                        options=ClaudeCodeOptions(
-                            model=model_id,
-                            max_turns=1,
-                        )
-                    ):
-                        if hasattr(message, 'content') and message.content:
-                            for block in message.content:
-                                if hasattr(block, 'text'):
-                                    result_text += block.text
-                    return _extract_json(result_text)
-                except Exception as retry_e:
-                    if _is_real_rate_limit(retry_e):
-                        if attempt == len(retry_delays):
-                            logger.error(f"Rate limit persists after {len(retry_delays)} retries — re-raising")
-                            raise
-                        continue
-                    logger.error(f"Non-rate-limit error on retry: {retry_e}")
-                    return {"error": str(retry_e)}
-            raise  # Shouldn't reach here, but safety net
-        logger.error(f"Agent error: {e}")
-        return {"error": str(e)}
+            return _extract_json(result_text)
+
+        except Exception as e:
+            last_error = e
+
+            if _is_real_rate_limit(e):
+                # Exponential backoff for real rate limits
+                retry_delays = [30, 60, 120]
+                for rl_attempt, delay in enumerate(retry_delays, 1):
+                    logger.warning(f"Rate limited — retry {rl_attempt}/{len(retry_delays)} in {delay}s")
+                    await asyncio.sleep(delay)
+                    try:
+                        result_text = await _query_once(query, full_message, options)
+                        return _extract_json(result_text)
+                    except Exception as retry_e:
+                        if _is_real_rate_limit(retry_e):
+                            if rl_attempt == len(retry_delays):
+                                raise
+                            continue
+                        logger.error(f"Non-rate-limit error on retry: {retry_e}")
+                        return {"error": str(retry_e)}
+                raise  # Safety net
+
+            # Transient subprocess failure (exit code 1, lock contention, etc.)
+            if attempt < 2:
+                logger.warning(f"Subprocess error (attempt {attempt + 1}/3), retrying in 2s: {e}")
+                await asyncio.sleep(2)
+                continue
+
+            logger.error(f"Agent error after 3 attempts: {e}")
+            return {"error": str(e)}
+
+    return {"error": str(last_error)}
 
 
 def _is_real_rate_limit(exc: Exception) -> bool:
@@ -237,4 +240,4 @@ async def summarize_mda_for_capital(mda_text: str, year: str) -> str:
 async def classify_business_type(company_name: str, sic_code: int, description: str = "") -> Dict[str, Any]:
     """Classify whether a company is a product business or commodity business."""
     msg = f"Company: {company_name}\nSIC Code: {sic_code}\nDescription: {description}"
-    return await run_agent(BUSINESS_TYPE_CLASSIFIER_PROMPT, msg, model="haiku")
+    return await run_agent(BUSINESS_TYPE_CLASSIFIER_PROMPT, msg, model="sonnet")

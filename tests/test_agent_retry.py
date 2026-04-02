@@ -59,9 +59,9 @@ class TestRunAgentRateLimitRetry:
     """Covers the retry logic added to run_agent for rate-limit errors."""
 
     @pytest.mark.asyncio
-    async def test_non_rate_limit_error_returns_error_dict_no_retry(self):
-        """A non-rate-limit exception should return an error dict immediately,
-        with no retries and no sleeps."""
+    async def test_non_rate_limit_error_retries_as_transient_then_returns_error(self):
+        """A non-rate-limit exception retries up to 3 times as a transient subprocess
+        failure, then returns an error dict."""
         def query_fn(*a, **kw):
             raise ValueError("invalid token")
 
@@ -72,7 +72,9 @@ class TestRunAgentRateLimitRetry:
 
         assert "error" in result
         assert "invalid token" in result["error"]
-        mock_sleep.assert_not_called()
+        # Retries twice with 2s delays for transient subprocess failures
+        assert mock_sleep.call_count == 2
+        assert all(c.args[0] == 2 for c in mock_sleep.call_args_list)
 
     @pytest.mark.asyncio
     async def test_rate_limit_retry_succeeds_on_second_attempt(self):
@@ -186,11 +188,11 @@ class TestRunAgentRateLimitRetry:
         assert mock_sleep.call_count >= 1, f"No retry for: {error_msg}"
 
     @pytest.mark.asyncio
-    async def test_sdk_parse_error_with_rate_limit_is_not_retried(self):
-        """MessageParseError('rate_limit_event') should NOT trigger retries.
+    async def test_sdk_parse_error_not_treated_as_rate_limit(self):
+        """MessageParseError('rate_limit_event') should NOT trigger rate-limit retries.
 
-        This is an SDK bug, not a real rate limit. The monkey-patch handles it;
-        if it somehow gets through, treat it as a regular error, not a rate limit.
+        It may retry as a transient subprocess error, but should never trigger the
+        30s/60s/120s rate-limit backoff. The error dict is returned after transient retries.
         """
         class MessageParseError(Exception):
             pass
@@ -203,10 +205,11 @@ class TestRunAgentRateLimitRetry:
             from agents.definitions import run_agent
             result = await run_agent("prompt", "msg")
 
-        # Should be treated as a regular error, NOT retried
         assert "error" in result
         assert "rate_limit_event" in result["error"]
-        mock_sleep.assert_not_called()
+        # Only transient retries (2s delays), never rate-limit retries (30s+)
+        for call in mock_sleep.call_args_list:
+            assert call.args[0] == 2, f"Expected 2s transient delay, got {call.args[0]}s (rate limit backoff)"
 
     @pytest.mark.asyncio
     async def test_successful_first_call_no_retry(self):
