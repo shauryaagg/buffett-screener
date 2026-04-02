@@ -22,13 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 def _try_create_market_data():
-    """Create MarketDataService if FMP_API_KEY is available, else None."""
+    """Create MarketDataService. Uses Yahoo Finance — no API key needed."""
     try:
         from data.market_data import MarketDataService
         return MarketDataService()
-    except ValueError:
-        logger.warning("FMP_API_KEY not set — MarketDataService unavailable. "
-                       "Full pipeline runs require it; run_single will work with limited price data.")
+    except Exception as e:
+        logger.warning(f"MarketDataService unavailable: {e}")
         return None
 
 
@@ -56,7 +55,7 @@ class Pipeline:
         5. Mark complete when done
         """
         if self.market_data is None:
-            raise RuntimeError("Full pipeline run requires FMP_API_KEY to build the stock universe.")
+            raise RuntimeError("MarketDataService could not be initialized.")
 
         run_id = run_id or str(uuid.uuid4())[:8]
         logger.info(f"Starting pipeline run: {run_id}")

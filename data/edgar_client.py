@@ -1,5 +1,6 @@
 import logging
 from typing import Dict, Optional, List, Tuple
+import yfinance as yf
 from edgar import Company, set_identity
 from config.settings import EDGAR_IDENTITY
 from core.database import Database
@@ -35,6 +36,21 @@ class EdgarClient:
         if company and hasattr(company, 'sic'):
             return int(company.sic) if company.sic else None
         return None
+
+    def get_company_info_fallback(self, ticker: str) -> Dict[str, str]:
+        """Get basic company info from yfinance when EDGAR lookup fails."""
+        try:
+            info = yf.Ticker(ticker).info
+            if not info or not isinstance(info, dict):
+                return {}
+            result = {}
+            for key in ("longBusinessSummary", "sector", "industry"):
+                if info.get(key):
+                    result[key] = info[key]
+            return result
+        except Exception as e:
+            logger.debug(f"yfinance fallback failed for {ticker}: {e}")
+            return {}
 
     def has_tenk(self, ticker: str) -> bool:
         """Check if the company has at least one 10-K filing."""

@@ -78,13 +78,26 @@ class BusinessTypeFilter(FilterBase):
         else:
             reasons.append("No SIC code found — allowing through for manual review")
 
-        # 3. Verify 10-K filing exists
+        # 3. Verify 10-K filing exists on EDGAR
         has_filing = self.edgar.has_tenk(company.ticker)
         if not has_filing:
-            return FilterResult(
-                passed=False,
-                reasoning="No 10-K filing found on EDGAR"
-            )
+            # Check if yfinance knows about this company — helps the user understand why
+            fallback_info = self.edgar.get_company_info_fallback(company.ticker)
+            if fallback_info.get("longBusinessSummary"):
+                return FilterResult(
+                    passed=False,
+                    reasoning=(
+                        "No 10-K filing on EDGAR (company may file with banking regulators instead of SEC). "
+                        f"Business data exists on Yahoo Finance (sector: {fallback_info.get('sector', 'N/A')}, "
+                        f"industry: {fallback_info.get('industry', 'N/A')}), but this pipeline requires "
+                        "10-K filings for full analysis."
+                    )
+                )
+            else:
+                return FilterResult(
+                    passed=False,
+                    reasoning="No 10-K filing on EDGAR and no business data available from yfinance"
+                )
         reasons.append("Has 10-K filing on EDGAR")
 
         return FilterResult(
@@ -94,7 +107,7 @@ class BusinessTypeFilter(FilterBase):
 
     def build_universe(self) -> List[CompanyInfo]:
         """
-        Build the initial universe of companies from FMP market data.
+        Build the initial universe of companies from market data.
         Returns list of CompanyInfo objects in the $5M-$5B market cap range.
         """
         all_prices = self.market_data.fetch_all_prices()

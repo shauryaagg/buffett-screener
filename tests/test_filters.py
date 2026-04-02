@@ -94,16 +94,73 @@ class TestF1BusinessType:
         assert "outside" in result.reasoning.lower()
 
     @pytest.mark.asyncio
-    async def test_no_tenk_fails(self, memory_db):
-        """Even with a valid SIC, no 10-K filing => fail."""
+    async def test_no_tenk_and_no_yfinance_fails(self, memory_db):
+        """No 10-K filing AND no yfinance data => fail."""
         edgar = MagicMock()
         edgar.has_tenk.return_value = False
+        edgar.get_company_info_fallback.return_value = {}
         filt = self._make_filter(memory_db, edgar=edgar)
         company = _make_company(sic=3559)
 
         result = await filt.evaluate(company)
         assert result.passed is False
+        assert "10-K" in result.reasoning or "no business data" in result.reasoning.lower()
+
+    @pytest.mark.asyncio
+    async def test_no_tenk_but_yfinance_fallback_fails(self, memory_db):
+        """No 10-K filing but yfinance has business summary => FAIL.
+
+        The company may file with banking regulators instead of SEC.
+        The pipeline requires 10-K filings for full analysis.
+        """
+        edgar = MagicMock()
+        edgar.has_tenk.return_value = False
+        edgar.get_company_info_fallback.return_value = {
+            "longBusinessSummary": "A diversified industrial company...",
+            "sector": "Industrials",
+            "industry": "Specialty Chemicals",
+        }
+        filt = self._make_filter(memory_db, edgar=edgar)
+        company = _make_company(sic=3559)
+
+        result = await filt.evaluate(company)
+        assert result.passed is False
+        assert "No 10-K filing on EDGAR" in result.reasoning
+        assert "banking regulators" in result.reasoning
+        assert "Yahoo Finance" in result.reasoning
+        assert "sector: Industrials" in result.reasoning
+        assert "industry: Specialty Chemicals" in result.reasoning
+        assert "requires 10-K filings" in result.reasoning
+
+    @pytest.mark.asyncio
+    async def test_no_tenk_yfinance_fallback_no_summary_fails(self, memory_db):
+        """No 10-K, yfinance returns sector/industry but no longBusinessSummary => fail."""
+        edgar = MagicMock()
+        edgar.has_tenk.return_value = False
+        edgar.get_company_info_fallback.return_value = {
+            "sector": "Industrials",
+            "industry": "Specialty Chemicals",
+            # No longBusinessSummary
+        }
+        filt = self._make_filter(memory_db, edgar=edgar)
+        company = _make_company(sic=3559)
+
+        result = await filt.evaluate(company)
+        assert result.passed is False
+        assert "no business data" in result.reasoning.lower() or "yfinance" in result.reasoning.lower()
+
+    @pytest.mark.asyncio
+    async def test_has_tenk_still_works_normally(self, memory_db):
+        """When EDGAR has a 10-K filing, yfinance fallback is NOT called."""
+        edgar = MagicMock()
+        edgar.has_tenk.return_value = True
+        filt = self._make_filter(memory_db, edgar=edgar)
+        company = _make_company(sic=3559)
+
+        result = await filt.evaluate(company)
+        assert result.passed is True
         assert "10-K" in result.reasoning
+        edgar.get_company_info_fallback.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_no_sic_on_company_falls_back_to_edgar(self, memory_db):

@@ -2,10 +2,10 @@
 Agent definitions for the Buffett Screener pipeline.
 Uses claude-code-sdk to run Claude analysis with structured prompts.
 """
+import asyncio
 import json
 import logging
-from typing import Optional, Dict, Any
-from claude_code_sdk import query, ClaudeCodeOptions, Message
+from typing import Dict, Any
 
 from config.prompts import (
     BUSINESS_ANALYST_PROMPT,
@@ -30,18 +30,30 @@ async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Di
         user_message: The content to analyze
         model: Model to use ("sonnet", "opus", "haiku")
     """
+    # Lazy import to avoid issues when SDK isn't installed
+    from claude_code_sdk import query, ClaudeCodeOptions
+
     try:
         full_message = f"{prompt}\n\n---\n\nHere is the content to analyze:\n\n{user_message}"
+
+        # Map model names to full model IDs
+        model_map = {
+            "opus": "claude-opus-4-20250514",
+            "sonnet": "claude-sonnet-4-20250514",
+            "haiku": "claude-haiku-4-20250514",
+        }
+        model_id = model_map.get(model, f"claude-{model}-4-20250514")
 
         result_text = ""
         async for message in query(
             prompt=full_message,
             options=ClaudeCodeOptions(
-                model=f"claude-{model}-4-20250514" if model in ("sonnet", "opus") else f"claude-3-5-{model}-20241022",
+                model=model_id,
                 max_turns=1,
             )
         ):
-            if isinstance(message, Message) and message.content:
+            # Handle different message types robustly
+            if hasattr(message, 'content') and message.content:
                 for block in message.content:
                     if hasattr(block, 'text'):
                         result_text += block.text
@@ -52,15 +64,46 @@ async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Di
     except Exception as e:
         error_str = str(e).lower()
         if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
-            raise  # Let the pipeline handle rate limits
+            retry_delays = [30, 60, 120]
+            for attempt, delay in enumerate(retry_delays, 1):
+                logger.warning(f"Rate limited — retry {attempt}/{len(retry_delays)} in {delay}s")
+                await asyncio.sleep(delay)
+                try:
+                    result_text = ""
+                    async for message in query(
+                        prompt=full_message,
+                        options=ClaudeCodeOptions(
+                            model=model_id,
+                            max_turns=1,
+                        )
+                    ):
+                        if hasattr(message, 'content') and message.content:
+                            for block in message.content:
+                                if hasattr(block, 'text'):
+                                    result_text += block.text
+                    return _extract_json(result_text)
+                except Exception as retry_e:
+                    retry_str = str(retry_e).lower()
+                    if "rate_limit" in retry_str or "rate limit" in retry_str or "429" in retry_str or "overloaded" in retry_str:
+                        if attempt == len(retry_delays):
+                            logger.error(f"Rate limit persists after {len(retry_delays)} retries — re-raising")
+                            raise
+                        continue
+                    logger.error(f"Non-rate-limit error on retry: {retry_e}")
+                    return {"error": str(retry_e)}
+            raise  # Shouldn't reach here, but safety net
         logger.error(f"Agent error: {e}")
         return {"error": str(e)}
 
 
 def _extract_json(text: str) -> Dict[str, Any]:
     """Extract JSON from agent response text. Handles markdown code blocks."""
-    # Try direct parse first
+    if not text or not text.strip():
+        return {"error": "Empty response from agent", "raw_text": ""}
+
     text = text.strip()
+
+    # Try direct parse first
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -93,7 +136,7 @@ def _extract_json(text: str) -> Dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-    return {"error": "Could not parse JSON from response", "raw_text": text[:500]}
+    return {"error": "Could not parse JSON from response", "raw_text": text[:2000]}
 
 
 async def analyze_business_description(item1_text: str) -> Dict[str, Any]:

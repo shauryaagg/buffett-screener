@@ -4,8 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- API Keys & Identity ---
-FMP_API_KEY = os.getenv("FMP_API_KEY", "")
+# --- Identity ---
 EDGAR_IDENTITY = os.getenv("EDGAR_IDENTITY", "Shaurya shauryaagg2000@gmail.com")
 
 # --- SIC Code Exclusions (commodity/non-product businesses) ---

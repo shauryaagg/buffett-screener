@@ -4,6 +4,7 @@ typer[all]
 pydantic>=2.0
 pandas
 requests
+yfinance>=0.2.0
 python-dotenv
 pytest>=8.0
 pytest-asyncio>=0.23

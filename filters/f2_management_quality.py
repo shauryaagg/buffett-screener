@@ -1,5 +1,4 @@
 """Filter 2: Management Quality — multi-agent 10-K qualitative analysis."""
-import asyncio
 import logging
 from filters.filter_base import FilterBase
 from core.models import CompanyInfo, FilterResult, ManagementQualityScore
@@ -71,32 +70,28 @@ class ManagementQualityFilter(FilterBase):
                 }
             )
 
-        # Step 4: Run Risk Analyst and MD&A Analyst in parallel
+        # Step 4: Run Risk Analyst and MD&A Analyst sequentially
+        # (claude-code-sdk spawns subprocesses; concurrent calls cause async context issues)
         risk_result = {}
         mda_result = {}
 
-        tasks = []
         if item1a:
-            tasks.append(("risk", analyze_risk_factors(item1a[:50000])))
+            try:
+                risk_result = await analyze_risk_factors(item1a[:50000])
+            except Exception as e:
+                error_str = str(e).lower()
+                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
+                    raise
+                logger.warning(f"  {company.ticker}: risk analysis failed: {e}")
+
         if item7:
-            tasks.append(("mda", analyze_mda(item7[:80000])))
-
-        if tasks:
-            task_names = [t[0] for t in tasks]
-            task_coros = [t[1] for t in tasks]
-            results = await asyncio.gather(*task_coros, return_exceptions=True)
-
-            for name, result in zip(task_names, results):
-                if isinstance(result, Exception):
-                    error_str = str(result).lower()
-                    if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
-                        raise result
-                    logger.warning(f"  {company.ticker}: {name} analysis failed: {result}")
-                    continue
-                if name == "risk":
-                    risk_result = result
-                elif name == "mda":
-                    mda_result = result
+            try:
+                mda_result = await analyze_mda(item7[:80000])
+            except Exception as e:
+                error_str = str(e).lower()
+                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
+                    raise
+                logger.warning(f"  {company.ticker}: MD&A analysis failed: {e}")
 
         # Step 5: Synthesize scores — incorporate all available dimensions
         def sf(val, default=5.0):
