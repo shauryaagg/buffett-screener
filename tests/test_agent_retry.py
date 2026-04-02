@@ -1,8 +1,9 @@
 """Tests for run_agent() rate-limit retry logic in agents/definitions.py.
 
 The retry logic retries up to 3 times with exponential backoff (30s, 60s, 120s)
-when rate-limit errors occur, then re-raises. Non-rate-limit errors are returned
-as error dicts without retrying.
+when real rate-limit errors occur, then re-raises. Non-rate-limit errors
+(including SDK parse failures containing "rate_limit") are returned as error
+dicts without retrying.
 
 All calls to claude_code_sdk.query are mocked — no real API calls.
 """
@@ -82,7 +83,7 @@ class TestRunAgentRateLimitRetry:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                raise Exception("rate_limit exceeded")
+                raise Exception("rate limit exceeded")
             return _FakeAsyncIter([_make_message('{"score": 8}')])
 
         p1, p2 = _patch_sdk(query_fn)
@@ -160,10 +161,10 @@ class TestRunAgentRateLimitRetry:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("error_msg", [
-        "rate_limit exceeded",
         "rate limit exceeded",
-        "Error 429: Too Many Requests",
+        "429 Too Many Requests",
         "server is overloaded",
+        "too many requests",
     ])
     async def test_rate_limit_detection_variants(self, error_msg):
         """Verify all rate-limit string variants trigger retry."""
@@ -183,6 +184,29 @@ class TestRunAgentRateLimitRetry:
 
         assert result == {"ok": True}, f"Failed for error message: {error_msg}"
         assert mock_sleep.call_count >= 1, f"No retry for: {error_msg}"
+
+    @pytest.mark.asyncio
+    async def test_sdk_parse_error_with_rate_limit_is_not_retried(self):
+        """MessageParseError('rate_limit_event') should NOT trigger retries.
+
+        This is an SDK bug, not a real rate limit. The monkey-patch handles it;
+        if it somehow gets through, treat it as a regular error, not a rate limit.
+        """
+        class MessageParseError(Exception):
+            pass
+
+        def query_fn(*a, **kw):
+            raise MessageParseError("Unknown message type: rate_limit_event")
+
+        p1, p2 = _patch_sdk(query_fn)
+        with p1, p2, patch("agents.definitions.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            from agents.definitions import run_agent
+            result = await run_agent("prompt", "msg")
+
+        # Should be treated as a regular error, NOT retried
+        assert "error" in result
+        assert "rate_limit_event" in result["error"]
+        mock_sleep.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_successful_first_call_no_retry(self):
@@ -207,7 +231,7 @@ class TestRunAgentRateLimitRetry:
             nonlocal call_count
             call_count += 1
             if call_count <= 2:
-                raise Exception("rate_limit")
+                raise Exception("too many requests")
             return _FakeAsyncIter([_make_message('{"ok": true}')])
 
         p1, p2 = _patch_sdk(query_fn)

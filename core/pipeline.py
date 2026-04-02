@@ -374,8 +374,11 @@ class Pipeline:
 
 
 def _is_rate_limit_error(exc: Exception) -> bool:
+    """Check for real rate limit errors, not SDK parse failures."""
+    if "ParseError" in type(exc).__name__:
+        return False
     error_str = str(exc).lower()
-    return any(term in error_str for term in ("rate_limit", "rate limit", "429", "overloaded"))
+    return any(term in error_str for term in ("429", "overloaded", "rate limit exceeded", "too many requests"))
 
 
 def _log_run_summary(db: Database, run_id: str):

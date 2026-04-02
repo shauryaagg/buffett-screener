@@ -16,12 +16,11 @@ from core.pipeline import _is_rate_limit_error
 class TestIsRateLimitError:
 
     @pytest.mark.parametrize("msg", [
-        "rate_limit exceeded",
         "rate limit exceeded",
         "Error 429: Too Many Requests",
         "The server is overloaded, please retry",
-        "RATE_LIMIT hit",
-        "Rate Limit reached for model",
+        "Rate Limit Exceeded for model",
+        "too many requests",
     ])
     def test_detects_rate_limit(self, msg):
         exc = Exception(msg)
@@ -34,15 +33,25 @@ class TestIsRateLimitError:
         "Internal server error",
         "KeyError: 'score'",
         "",
+        # SDK parse errors containing "rate_limit" should NOT match
+        "Unknown message type: rate_limit_event",
     ])
     def test_rejects_non_rate_limit(self, msg):
         exc = Exception(msg)
         assert _is_rate_limit_error(exc) is False
 
+    def test_parse_error_never_matches(self):
+        """MessageParseError with 'rate_limit' in the message is NOT a real rate limit."""
+        # Simulate the SDK's MessageParseError
+        class MessageParseError(Exception):
+            pass
+        exc = MessageParseError("Unknown message type: rate_limit_event")
+        assert _is_rate_limit_error(exc) is False
+
     def test_case_insensitive(self):
-        assert _is_rate_limit_error(Exception("RATE_LIMIT")) is True
-        assert _is_rate_limit_error(Exception("Rate Limit")) is True
+        assert _is_rate_limit_error(Exception("429 Too Many Requests")) is True
         assert _is_rate_limit_error(Exception("OVERLOADED")) is True
+        assert _is_rate_limit_error(Exception("Rate Limit Exceeded")) is True
 
 
 # ===========================================================================

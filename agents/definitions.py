@@ -104,8 +104,7 @@ async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Di
         return _extract_json(result_text)
 
     except Exception as e:
-        error_str = str(e).lower()
-        if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
+        if _is_real_rate_limit(e):
             retry_delays = [30, 60, 120]
             for attempt, delay in enumerate(retry_delays, 1):
                 logger.warning(f"Rate limited — retry {attempt}/{len(retry_delays)} in {delay}s")
@@ -125,8 +124,7 @@ async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Di
                                     result_text += block.text
                     return _extract_json(result_text)
                 except Exception as retry_e:
-                    retry_str = str(retry_e).lower()
-                    if "rate_limit" in retry_str or "rate limit" in retry_str or "429" in retry_str or "overloaded" in retry_str:
+                    if _is_real_rate_limit(retry_e):
                         if attempt == len(retry_delays):
                             logger.error(f"Rate limit persists after {len(retry_delays)} retries — re-raising")
                             raise
@@ -136,6 +134,23 @@ async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Di
             raise  # Shouldn't reach here, but safety net
         logger.error(f"Agent error: {e}")
         return {"error": str(e)}
+
+
+def _is_real_rate_limit(exc: Exception) -> bool:
+    """Check if an exception is an actual rate limit block (not an SDK parse error).
+
+    The claude-code-sdk sends rate_limit_event messages with status "allowed"
+    after successful calls. Our monkey-patch handles these, but if the patch
+    fails, the SDK throws MessageParseError containing "rate_limit_event" —
+    that's NOT a real rate limit. Real rate limits come as HTTP 429 or explicit
+    rate limit errors from the API, not as parse failures.
+    """
+    etype = type(exc).__name__
+    # SDK parse errors are never real rate limits
+    if "ParseError" in etype:
+        return False
+    error_str = str(exc).lower()
+    return any(term in error_str for term in ("429", "overloaded", "rate limit exceeded", "too many requests"))
 
 
 def _extract_json(text: str) -> Dict[str, Any]:

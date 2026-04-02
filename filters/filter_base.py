@@ -8,6 +8,14 @@ from core.database import Database
 logger = logging.getLogger(__name__)
 
 
+def _is_rate_limit(exc: Exception) -> bool:
+    """Detect real rate limit errors, not SDK parse failures."""
+    if "ParseError" in type(exc).__name__:
+        return False
+    error_str = str(exc).lower()
+    return any(t in error_str for t in ("429", "overloaded", "rate limit exceeded", "too many requests"))
+
+
 class FilterBase(ABC):
     """Base class for pipeline filters."""
 
@@ -60,8 +68,7 @@ class FilterBase(ABC):
                 logger.info(f"  {company.ticker}: {status} (score={result.score})")
 
             except Exception as e:
-                error_str = str(e).lower()
-                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
+                if _is_rate_limit(e):
                     logger.warning(f"  Rate limit hit at {company.ticker}. Raising for pipeline to handle.")
                     raise
 

@@ -1,6 +1,6 @@
 """Filter 2: Management Quality — multi-agent 10-K qualitative analysis."""
 import logging
-from filters.filter_base import FilterBase
+from filters.filter_base import FilterBase, _is_rate_limit
 from core.models import CompanyInfo, FilterResult, ManagementQualityScore
 from core.database import Database
 from data.edgar_client import EdgarClient
@@ -79,8 +79,7 @@ class ManagementQualityFilter(FilterBase):
             try:
                 risk_result = await analyze_risk_factors(item1a[:50000])
             except Exception as e:
-                error_str = str(e).lower()
-                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
+                if _is_rate_limit(e):
                     raise
                 logger.warning(f"  {company.ticker}: risk analysis failed: {e}")
 
@@ -88,8 +87,7 @@ class ManagementQualityFilter(FilterBase):
             try:
                 mda_result = await analyze_mda(item7[:80000])
             except Exception as e:
-                error_str = str(e).lower()
-                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
+                if _is_rate_limit(e):
                     raise
                 logger.warning(f"  {company.ticker}: MD&A analysis failed: {e}")
 

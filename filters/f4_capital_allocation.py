@@ -1,7 +1,7 @@
 """Filter 4: Capital Allocation — 10-year capital allocation intelligence assessment."""
 import json
 import logging
-from filters.filter_base import FilterBase
+from filters.filter_base import FilterBase, _is_rate_limit
 from core.models import CompanyInfo, FilterResult, CapitalAllocationScore
 from core.database import Database
 from data.financial_data import FinancialDataService
@@ -49,8 +49,7 @@ class CapitalAllocationFilter(FilterBase):
                 summary = await summarize_mda_for_capital(mda_text[:30000], filing_date)
                 mda_summaries.append(f"--- {filing_date} ---\n{summary}")
             except Exception as e:
-                error_str = str(e).lower()
-                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str or "overloaded" in error_str:
+                if _is_rate_limit(e):
                     raise
                 logger.warning(f"  {company.ticker}: error summarizing {filing_date} MD&A: {e}")
                 mda_summaries.append(f"--- {filing_date} ---\n[Error extracting summary]")
