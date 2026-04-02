@@ -1,10 +1,11 @@
 """
 Agent definitions for the Buffett Screener pipeline.
-Uses claude-code-sdk to run Claude analysis with structured prompts.
+Calls the `claude` CLI directly in --print mode — no SDK needed.
 """
 import asyncio
 import json
 import logging
+import shutil
 from typing import Dict, Any
 
 from config.prompts import (
@@ -19,141 +20,77 @@ from config.prompts import (
 
 logger = logging.getLogger(__name__)
 
-
-_sdk_patched = False
-
-
-def _patch_sdk_message_parser():
-    """Patch claude-code-sdk to handle rate_limit_event messages.
-
-    The SDK (v0.0.25) crashes with MessageParseError on rate_limit_event
-    messages from the API. These are informational stream events sent while
-    the API waits for a rate limit to clear — the actual response follows.
-    We patch parse_message to return a SystemMessage so the generator
-    continues instead of crashing.
-
-    Must patch both the source module AND the client module, because
-    client.py does `from .message_parser import parse_message` at import
-    time (holding its own reference to the original function).
-    """
-    global _sdk_patched
-    if _sdk_patched:
-        return
-    try:
-        from claude_code_sdk._internal import message_parser, client
-        from claude_code_sdk.types import SystemMessage
-
-        _original_parse = message_parser.parse_message
-
-        def _patched_parse(data):
-            if isinstance(data, dict):
-                msg_type = data.get("type", "")
-                if msg_type in ("rate_limit_event",):
-                    logger.debug(f"SDK: skipping {msg_type} event")
-                    return SystemMessage(subtype=msg_type, data=data)
-            return _original_parse(data)
-
-        message_parser.parse_message = _patched_parse
-        client.parse_message = _patched_parse
-        _sdk_patched = True
-    except Exception as e:
-        logger.warning(f"Could not patch SDK message parser: {e}")
+# Model aliases — Haiku isn't available via Claude Code on Max subscriptions
+MODEL_MAP = {
+    "opus": "opus",
+    "sonnet": "sonnet",
+}
 
 
-async def _query_once(query_fn, prompt: str, options) -> str:
-    """Run a single query and return the result text."""
-    result_text = ""
-    async for message in query_fn(prompt=prompt, options=options):
-        if hasattr(message, 'content') and message.content:
-            for block in message.content:
-                if hasattr(block, 'text'):
-                    result_text += block.text
-    return result_text
+def _find_claude_cli() -> str:
+    """Find the claude CLI binary."""
+    path = shutil.which("claude")
+    if path:
+        return path
+    raise FileNotFoundError(
+        "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"
+    )
 
 
 async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Dict[str, Any]:
     """
-    Run a Claude agent with a system prompt and user message.
-    Returns parsed JSON from the agent's response.
+    Run a Claude agent via the CLI in --print mode.
 
-    Retries transient subprocess failures (exit code 1) up to 2 times with
-    a short delay, and real rate limits up to 3 times with exponential backoff.
+    Pipes the prompt via stdin, gets JSON output back. No SDK, no subprocess
+    lifecycle bugs, no message parsing issues. Just like running claude from
+    a terminal.
     """
-    from claude_code_sdk import query, ClaudeCodeOptions
-
-    _patch_sdk_message_parser()
-
+    claude_path = _find_claude_cli()
     full_message = f"{prompt}\n\n---\n\nHere is the content to analyze:\n\n{user_message}"
+    model_id = MODEL_MAP.get(model, model)
 
-    # Note: Haiku is not available via Claude Code on Max subscriptions
-    model_map = {
-        "opus": "claude-opus-4-20250514",
-        "sonnet": "claude-sonnet-4-20250514",
-    }
-    model_id = model_map.get(model, f"claude-{model}-4-20250514")
-    options = ClaudeCodeOptions(model=model_id, max_turns=1)
+    cmd = [
+        claude_path,
+        "--print",
+        "--model", model_id,
+        "--output-format", "json",
+        "--max-turns", "1",
+        "--no-session-persistence",
+        "--dangerously-skip-permissions",
+    ]
 
-    # Try up to 3 times total for transient subprocess failures
-    last_error = None
-    for attempt in range(3):
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        stdout, stderr = await proc.communicate(input=full_message.encode("utf-8"))
+
+        if proc.returncode != 0:
+            stderr_text = stderr.decode("utf-8", errors="replace")[:500]
+            logger.error(f"claude CLI exited {proc.returncode}: {stderr_text}")
+            return {"error": f"CLI exit code {proc.returncode}: {stderr_text}"}
+
+        # Parse the JSON envelope from --output-format json
+        output = stdout.decode("utf-8").strip()
         try:
-            result_text = await _query_once(query, full_message, options)
+            envelope = json.loads(output)
+        except json.JSONDecodeError:
+            # Might be plain text if --output-format json wasn't honored
+            return _extract_json(output)
 
-            # Check for model availability errors returned as text
-            if result_text and "issue with" in result_text.lower():
-                logger.error(f"Model unavailable ({model_id}): {result_text[:200]}")
-                return {"error": result_text[:500]}
+        if envelope.get("is_error"):
+            return {"error": envelope.get("result", "Unknown CLI error")}
 
-            return _extract_json(result_text)
+        result_text = envelope.get("result", "")
+        return _extract_json(result_text)
 
-        except Exception as e:
-            last_error = e
-
-            if _is_real_rate_limit(e):
-                # Exponential backoff for real rate limits
-                retry_delays = [30, 60, 120]
-                for rl_attempt, delay in enumerate(retry_delays, 1):
-                    logger.warning(f"Rate limited — retry {rl_attempt}/{len(retry_delays)} in {delay}s")
-                    await asyncio.sleep(delay)
-                    try:
-                        result_text = await _query_once(query, full_message, options)
-                        return _extract_json(result_text)
-                    except Exception as retry_e:
-                        if _is_real_rate_limit(retry_e):
-                            if rl_attempt == len(retry_delays):
-                                raise
-                            continue
-                        logger.error(f"Non-rate-limit error on retry: {retry_e}")
-                        return {"error": str(retry_e)}
-                raise  # Safety net
-
-            # Transient subprocess failure (exit code 1, lock contention, etc.)
-            if attempt < 2:
-                logger.warning(f"Subprocess error (attempt {attempt + 1}/3), retrying in 2s: {e}")
-                await asyncio.sleep(2)
-                continue
-
-            logger.error(f"Agent error after 3 attempts: {e}")
-            return {"error": str(e)}
-
-    return {"error": str(last_error)}
-
-
-def _is_real_rate_limit(exc: Exception) -> bool:
-    """Check if an exception is an actual rate limit block (not an SDK parse error).
-
-    The claude-code-sdk sends rate_limit_event messages with status "allowed"
-    after successful calls. Our monkey-patch handles these, but if the patch
-    fails, the SDK throws MessageParseError containing "rate_limit_event" —
-    that's NOT a real rate limit. Real rate limits come as HTTP 429 or explicit
-    rate limit errors from the API, not as parse failures.
-    """
-    etype = type(exc).__name__
-    # SDK parse errors are never real rate limits
-    if "ParseError" in etype:
-        return False
-    error_str = str(exc).lower()
-    return any(term in error_str for term in ("429", "overloaded", "rate limit exceeded", "too many requests"))
+    except Exception as e:
+        logger.error(f"Agent error: {e}")
+        return {"error": str(e)}
 
 
 def _extract_json(text: str) -> Dict[str, Any]:
