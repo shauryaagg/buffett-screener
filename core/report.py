@@ -93,7 +93,7 @@ def save_report(analysis: FullAnalysis, output_dir: str = "reports") -> str:
             lines.append(analysis.f2_result.reasoning)
             lines.append("")
     else:
-        lines.append("(Company did not pass Filter 1)")
+        lines.append("(Filter was not executed)")
         lines.append("")
     lines.append("---")
     lines.append("")
@@ -127,7 +127,7 @@ def save_report(analysis: FullAnalysis, output_dir: str = "reports") -> str:
             lines.append(analysis.f3_result.reasoning)
             lines.append("")
     else:
-        lines.append("(Company did not pass Filter 2)")
+        lines.append("(Filter was not executed)")
         lines.append("")
     lines.append("---")
     lines.append("")
@@ -155,7 +155,7 @@ def save_report(analysis: FullAnalysis, output_dir: str = "reports") -> str:
             lines.append(analysis.f4_result.reasoning)
             lines.append("")
     else:
-        lines.append("(Company did not pass Filter 3)")
+        lines.append("(Filter was not executed)")
         lines.append("")
 
     content = "\n".join(lines)

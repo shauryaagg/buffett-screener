@@ -135,13 +135,13 @@ class ManagementQualityFilter(FilterBase):
         # Build reasoning
         reasoning_parts = []
         if business_result.get("reasoning"):
-            reasoning_parts.append(f"Business: {business_result['reasoning'][:500]}")
+            reasoning_parts.append(f"**Business:** {business_result['reasoning']}")
         if risk_result.get("reasoning"):
-            reasoning_parts.append(f"Risk: {risk_result['reasoning'][:500]}")
+            reasoning_parts.append(f"**Risk:** {risk_result['reasoning']}")
         if mda_result.get("reasoning"):
-            reasoning_parts.append(f"MD&A: {mda_result['reasoning'][:500]}")
+            reasoning_parts.append(f"**MD&A:** {mda_result['reasoning']}")
 
-        full_reasoning = " | ".join(reasoning_parts)
+        full_reasoning = "\n\n".join(reasoning_parts)
 
         return FilterResult(
             passed=passed,

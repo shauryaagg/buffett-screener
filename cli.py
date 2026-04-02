@@ -64,13 +64,14 @@ def run(
 def analyze(
     ticker: str = typer.Argument(..., help="Stock ticker to analyze"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+    full: bool = typer.Option(False, "--full", help="Run all filters even if a company fails (bypass filter gates)"),
     save: bool = typer.Option(True, "--save/--no-save", help="Save full analysis as markdown report"),
 ):
     """Run deep analysis on a single ticker."""
     pipeline = get_pipeline()
 
     typer.echo(f"Analyzing {ticker.upper()}...")
-    result = asyncio.run(pipeline.run_single(ticker.upper(), verbose=verbose))
+    result = asyncio.run(pipeline.run_single(ticker.upper(), verbose=verbose, bypass_filters=full))
 
     typer.echo(f"\n{'='*60}")
     typer.echo(f"ANALYSIS RESULTS: {result.company.ticker} ({result.company.name})")

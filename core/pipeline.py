@@ -213,7 +213,7 @@ class Pipeline:
 
         return run_id
 
-    async def run_single(self, ticker: str, verbose: bool = False) -> FullAnalysis:
+    async def run_single(self, ticker: str, verbose: bool = False, bypass_filters: bool = False) -> FullAnalysis:
         """Run all 4 filters on a single ticker. Returns FullAnalysis."""
         if verbose:
             logger.setLevel(logging.DEBUG)
@@ -232,56 +232,72 @@ class Pipeline:
 
         # Filter 1: Business Type
         logger.info("\n--- Filter 1: Business Type ---")
-        f1_result = await self.filters[0].evaluate(company)
+        try:
+            f1_result = await self.filters[0].evaluate(company)
+        except Exception as e:
+            logger.error(f"  Filter 1 error: {e}")
+            f1_result = FilterResult(passed=False, reasoning=f"Error during evaluation: {e}")
         analysis.f1_result = f1_result
         logger.info(f"  Result: {'PASS' if f1_result.passed else 'FAIL'}")
         logger.info(f"  Reason: {f1_result.reasoning}")
 
         if not f1_result.passed:
-            analysis.final_passed = False
-            return analysis
+            if not bypass_filters:
+                analysis.final_passed = False
+                return analysis
+            logger.info("  [--full] Continuing despite Filter 1 failure")
 
         # Filter 2: Management Quality
         logger.info("\n--- Filter 2: Management Quality ---")
-        f2_result = await self.filters[1].evaluate(company)
+        try:
+            f2_result = await self.filters[1].evaluate(company)
+            if f2_result.details:
+                try:
+                    analysis.f2_scores = ManagementQualityScore(
+                        business_clarity=f2_result.details.get("business_clarity", 5),
+                        risk_honesty=f2_result.details.get("risk_honesty", 5),
+                        mda_transparency=f2_result.details.get("mda_transparency", 5),
+                        kpi_quality=f2_result.details.get("kpi_quality", 5),
+                        tone_authenticity=f2_result.details.get("tone", 5),
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"  Filter 2 error: {e}")
+            f2_result = FilterResult(passed=False, reasoning=f"Error during evaluation: {e}")
         analysis.f2_result = f2_result
-        if f2_result.details:
-            try:
-                analysis.f2_scores = ManagementQualityScore(
-                    business_clarity=f2_result.details.get("business_clarity", 5),
-                    risk_honesty=f2_result.details.get("risk_honesty", 5),
-                    mda_transparency=f2_result.details.get("mda_transparency", 5),
-                    kpi_quality=f2_result.details.get("kpi_quality", 5),
-                    tone_authenticity=f2_result.details.get("tone", 5),
-                )
-            except Exception:
-                pass
         score_str = f" (score: {f2_result.score:.1f})" if f2_result.score is not None else ""
         logger.info(f"  Result: {'PASS' if f2_result.passed else 'FAIL'}{score_str}")
         logger.info(f"  Reason: {f2_result.reasoning[:200]}")
 
         if not f2_result.passed:
-            analysis.final_passed = False
-            return analysis
+            if not bypass_filters:
+                analysis.final_passed = False
+                return analysis
+            logger.info("  [--full] Continuing despite Filter 2 failure")
 
         # Filter 3: Valuation
         logger.info("\n--- Filter 3: Valuation ---")
-        f3_result = await self.filters[2].evaluate(company)
+        try:
+            f3_result = await self.filters[2].evaluate(company)
+            if f3_result.details:
+                try:
+                    analysis.f3_valuation = ValuationResult(
+                        normalized_earnings=f3_result.details.get("normalized_earnings"),
+                        moat_type=f3_result.details.get("moat_type"),
+                        moat_strength=f3_result.details.get("moat_strength"),
+                        earning_power_multiple=f3_result.details.get("earning_power_multiple"),
+                        intrinsic_value=f3_result.details.get("intrinsic_value"),
+                        current_price=f3_result.details.get("current_price"),
+                        margin_of_safety=f3_result.details.get("margin_of_safety"),
+                        reasoning=f3_result.reasoning,
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"  Filter 3 error: {e}")
+            f3_result = FilterResult(passed=False, reasoning=f"Error during evaluation: {e}")
         analysis.f3_result = f3_result
-        if f3_result.details:
-            try:
-                analysis.f3_valuation = ValuationResult(
-                    normalized_earnings=f3_result.details.get("normalized_earnings"),
-                    moat_type=f3_result.details.get("moat_type"),
-                    moat_strength=f3_result.details.get("moat_strength"),
-                    earning_power_multiple=f3_result.details.get("earning_power_multiple"),
-                    intrinsic_value=f3_result.details.get("intrinsic_value"),
-                    current_price=f3_result.details.get("current_price"),
-                    margin_of_safety=f3_result.details.get("margin_of_safety"),
-                    reasoning=f3_result.reasoning[:2000],
-                )
-            except Exception:
-                pass
         logger.info(f"  Result: {'PASS' if f3_result.passed else 'FAIL'}")
         if f3_result.details:
             iv = f3_result.details.get("intrinsic_value")
@@ -292,28 +308,37 @@ class Pipeline:
                 logger.info(f"  Margin of Safety: {mos:.1%}")
 
         if not f3_result.passed:
-            analysis.final_passed = False
-            return analysis
+            if not bypass_filters:
+                analysis.final_passed = False
+                return analysis
+            logger.info("  [--full] Continuing despite Filter 3 failure")
 
         # Filter 4: Capital Allocation
         logger.info("\n--- Filter 4: Capital Allocation ---")
-        f4_result = await self.filters[3].evaluate(company)
+        try:
+            f4_result = await self.filters[3].evaluate(company)
+            if f4_result.details:
+                try:
+                    analysis.f4_scores = CapitalAllocationScore(
+                        buyback_quality=f4_result.details.get("buyback_quality", 5),
+                        capital_return=f4_result.details.get("capital_return", 5),
+                        acquisition_quality=f4_result.details.get("acquisition_quality", 5),
+                        debt_management=f4_result.details.get("debt_management", 5),
+                        reinvestment_quality=f4_result.details.get("reinvestment_quality", 5),
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"  Filter 4 error: {e}")
+            f4_result = FilterResult(passed=False, reasoning=f"Error during evaluation: {e}")
         analysis.f4_result = f4_result
-        if f4_result.details:
-            try:
-                analysis.f4_scores = CapitalAllocationScore(
-                    buyback_quality=f4_result.details.get("buyback_quality", 5),
-                    capital_return=f4_result.details.get("capital_return", 5),
-                    acquisition_quality=f4_result.details.get("acquisition_quality", 5),
-                    debt_management=f4_result.details.get("debt_management", 5),
-                    reinvestment_quality=f4_result.details.get("reinvestment_quality", 5),
-                )
-            except Exception:
-                pass
         score_str = f" (score: {f4_result.score:.1f})" if f4_result.score is not None else ""
         logger.info(f"  Result: {'PASS' if f4_result.passed else 'FAIL'}{score_str}")
 
-        analysis.final_passed = f4_result.passed
+        analysis.final_passed = all(
+            r is not None and r.passed
+            for r in [f1_result, f2_result, f3_result, f4_result]
+        )
 
         if analysis.final_passed:
             logger.info(f"\n*** {ticker} PASSED ALL FILTERS ***")

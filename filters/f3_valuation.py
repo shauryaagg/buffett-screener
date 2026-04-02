@@ -71,10 +71,16 @@ class ValuationFilter(FilterBase):
             )
 
         # Step 3: Extract results and check margin of safety
-        intrinsic_value = float(val_result.get("intrinsic_value_per_share", 0))
-        margin_of_safety = float(val_result.get("margin_of_safety", 0))
+        def safe_float(val, default=0.0):
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return default
+
+        intrinsic_value = safe_float(val_result.get("intrinsic_value_per_share"), 0.0)
+        margin_of_safety = safe_float(val_result.get("margin_of_safety"), 0.0)
         moat_type = val_result.get("moat_type", "unknown")
-        moat_strength = float(val_result.get("moat_strength", 0))
+        moat_strength = safe_float(val_result.get("moat_strength"), 0.0)
 
         # Recalculate margin of safety to be safe
         if intrinsic_value > 0:
@@ -96,7 +102,7 @@ class ValuationFilter(FilterBase):
         return FilterResult(
             passed=passed,
             score=margin_of_safety * 100,
-            reasoning=reasoning[:2000],
+            reasoning=reasoning,
             details={
                 "normalized_earnings": normalized_earnings,
                 "moat_type": moat_type,
