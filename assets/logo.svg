@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" fill="none">
+  <defs>
+    <!-- Background gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+
+    <!-- Green accent gradient -->
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2ea043"/>
+      <stop offset="100%" stop-color="#56d364"/>
+    </linearGradient>
+
+    <!-- Gold gradient for glasses + dollar sign -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e3b341"/>
+      <stop offset="100%" stop-color="#d29922"/>
+    </linearGradient>
+
+    <!-- Funnel blue-to-green gradient -->
+    <linearGradient id="funnelGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#388bfd" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#2ea043" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#56d364" stop-opacity="0.9"/>
+    </linearGradient>
+
+    <!-- Diamond glow gradient -->
+    <linearGradient id="diamondGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#56d364"/>
+      <stop offset="100%" stop-color="#2ea043"/>
+    </linearGradient>
+
+    <!-- Glow filter for dollar sign and diamond -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Softer glow for the diamond -->
+    <filter id="diamondGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feComposite in="blur" in2="SourceGraphic" operator="over"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Drop shadow -->
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="200" rx="12" fill="url(#bgGrad)"/>
+
+  <!-- Subtle stock chart polyline in background -->
+  <polyline
+    points="20,160 60,152 100,155 140,138 180,142 220,125 260,132 300,118 340,122 380,108 420,112 460,98 500,104 540,88 580,94 620,80 660,86 700,72 740,78 780,64"
+    stroke="#388bfd" stroke-width="1.2" fill="none" opacity="0.07"
+    stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Second chart line for depth -->
+  <polyline
+    points="20,170 60,165 100,168 140,155 180,160 220,148 260,152 300,140 340,144 380,134 420,138 460,126 500,130 540,120 580,124 620,112 660,118 700,106 740,110 780,100"
+    stroke="#2ea043" stroke-width="0.8" fill="none" opacity="0.05"
+    stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- ============ FUNNEL ICON ============ -->
+  <g transform="translate(65, 90)" filter="url(#shadow)">
+
+    <!-- Funnel outer shape (subtle fill) -->
+    <polygon points="-36,-42 36,-42 14,4 14,30 -14,30 -14,4"
+      fill="url(#funnelGrad)" opacity="0.1" stroke="url(#funnelGrad)" stroke-width="1"/>
+
+    <!-- Input dots flowing into funnel top -->
+    <circle cx="-28" cy="-52" r="2.5" fill="#388bfd" opacity="0.5"/>
+    <circle cx="-14" cy="-56" r="2" fill="#58a6ff" opacity="0.4"/>
+    <circle cx="0" cy="-54" r="2.5" fill="#388bfd" opacity="0.45"/>
+    <circle cx="14" cy="-57" r="2" fill="#58a6ff" opacity="0.35"/>
+    <circle cx="26" cy="-52" r="2.5" fill="#388bfd" opacity="0.5"/>
+    <circle cx="-8" cy="-60" r="1.5" fill="#79c0ff" opacity="0.3"/>
+    <circle cx="8" cy="-59" r="1.5" fill="#79c0ff" opacity="0.3"/>
+
+    <!-- Funnel layer 1 — Business Type (bright blue) -->
+    <line x1="-30" y1="-30" x2="30" y2="-30" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+
+    <!-- Funnel layer 2 — Mgmt Quality (mid blue) -->
+    <line x1="-22" y1="-16" x2="22" y2="-16" stroke="#388bfd" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+
+    <!-- Funnel layer 3 — Valuation (teal-green) -->
+    <line x1="-16" y1="-2" x2="16" y2="-2" stroke="#2ea043" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+
+    <!-- Funnel layer 4 — Capital Alloc (green) -->
+    <line x1="-13" y1="12" x2="13" y2="12" stroke="#56d364" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+
+    <!-- Dollar sign inside funnel stem -->
+    <text x="0" y="28" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="15" font-weight="bold" fill="url(#goldGrad)" filter="url(#glow)">$</text>
+
+    <!-- Output diamond (gem) below funnel -->
+    <g transform="translate(0, 44)" filter="url(#diamondGlow)">
+      <rect x="-4.5" y="-4.5" width="9" height="9" rx="1" fill="url(#diamondGrad)" transform="rotate(45 0 0)"/>
+    </g>
+  </g>
+
+  <!-- ============ TITLE TEXT ============ -->
+  <text x="136" y="72" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="42" font-weight="700" fill="#e6edf3" letter-spacing="-0.5">
+    Buffett Screener
+  </text>
+
+  <!-- ============ GLASSES (Buffett reference) ============ -->
+  <g transform="translate(462, 59)" opacity="0.55">
+    <ellipse cx="-10" cy="0" rx="8.5" ry="6.5" fill="none" stroke="url(#goldGrad)" stroke-width="1.3"/>
+    <ellipse cx="10" cy="0" rx="8.5" ry="6.5" fill="none" stroke="url(#goldGrad)" stroke-width="1.3"/>
+    <!-- Bridge -->
+    <path d="M-1.5,0 Q0,-3 1.5,0" fill="none" stroke="url(#goldGrad)" stroke-width="1.1"/>
+    <!-- Temples -->
+    <line x1="-18.5" y1="-1" x2="-23" y2="-3" stroke="url(#goldGrad)" stroke-width="1.1" stroke-linecap="round"/>
+    <line x1="18.5" y1="-1" x2="23" y2="-3" stroke="url(#goldGrad)" stroke-width="1.1" stroke-linecap="round"/>
+  </g>
+
+  <!-- ============ TAGLINE ============ -->
+  <text x="136" y="100" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="16" fill="#8b949e" letter-spacing="0.3">
+    AI-powered value investing analysis
+  </text>
+
+  <!-- ============ GREEN ACCENT BAR ============ -->
+  <rect x="136" y="114" width="60" height="3" rx="1.5" fill="url(#accentGrad)" opacity="0.8"/>
+
+  <!-- ============ FILTER PIPELINE BADGES ============ -->
+  <g transform="translate(136, 134)">
+    <!-- Badge 1: Business Type (bright blue) -->
+    <rect x="0" y="0" width="92" height="24" rx="12" fill="#58a6ff" fill-opacity="0.1" stroke="#58a6ff" stroke-width="0.7" stroke-opacity="0.35"/>
+    <text x="46" y="16" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#58a6ff" font-weight="500">Business Type</text>
+
+    <!-- Arrow 1 -->
+    <path d="M98,12 L108,12" stroke="#484f58" stroke-width="1" stroke-linecap="round"/>
+    <path d="M105,9 L108,12 L105,15" stroke="#484f58" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Badge 2: Mgmt Quality (mid blue) -->
+    <rect x="114" y="0" width="102" height="24" rx="12" fill="#388bfd" fill-opacity="0.1" stroke="#388bfd" stroke-width="0.7" stroke-opacity="0.35"/>
+    <text x="165" y="16" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#58a6ff" font-weight="500">Mgmt Quality</text>
+
+    <!-- Arrow 2 -->
+    <path d="M222,12 L232,12" stroke="#484f58" stroke-width="1" stroke-linecap="round"/>
+    <path d="M229,9 L232,12 L229,15" stroke="#484f58" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Badge 3: Valuation (green) -->
+    <rect x="238" y="0" width="82" height="24" rx="12" fill="#2ea043" fill-opacity="0.1" stroke="#2ea043" stroke-width="0.7" stroke-opacity="0.35"/>
+    <text x="279" y="16" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#3fb950" font-weight="500">Valuation</text>
+
+    <!-- Arrow 3 -->
+    <path d="M326,12 L336,12" stroke="#484f58" stroke-width="1" stroke-linecap="round"/>
+    <path d="M333,9 L336,12 L333,15" stroke="#484f58" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Badge 4: Capital Alloc (bright green) -->
+    <rect x="342" y="0" width="104" height="24" rx="12" fill="#56d364" fill-opacity="0.1" stroke="#56d364" stroke-width="0.7" stroke-opacity="0.35"/>
+    <text x="394" y="16" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#56d364" font-weight="500">Capital Alloc</text>
+  </g>
+
+  <!-- ============ TECH BADGES (bottom right) ============ -->
+  <g transform="translate(614, 152)">
+    <!-- Python badge -->
+    <rect x="0" y="0" width="72" height="22" rx="4" fill="#21262d" stroke="#30363d" stroke-width="0.7"/>
+    <circle cx="12" cy="11" r="3.5" fill="#3572A5"/>
+    <text x="22" y="15" font-family="'SF Mono', 'Fira Code', 'Consolas', monospace" font-size="10" fill="#8b949e">Python</text>
+
+    <!-- Claude badge -->
+    <rect x="82" y="0" width="68" height="22" rx="4" fill="#21262d" stroke="#30363d" stroke-width="0.7"/>
+    <circle cx="94" cy="11" r="3.5" fill="#d29922"/>
+    <text x="104" y="15" font-family="'SF Mono', 'Fira Code', 'Consolas', monospace" font-size="10" fill="#8b949e">Claude</text>
+  </g>
+
+  <!-- ============ BORDER ============ -->
+  <rect x="0.5" y="0.5" width="799" height="199" rx="12" fill="none" stroke="#30363d" stroke-width="1"/>
+</svg>
