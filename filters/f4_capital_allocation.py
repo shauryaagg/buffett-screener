@@ -30,10 +30,10 @@ class CapitalAllocationFilter(FilterBase):
         """
         # Stage 1: Get 10-year financial history
         history = self.financial_data.get_financial_history(company.ticker, years=10)
-        if len(history) < 3:
+        if len(history) == 0:
             return FilterResult(
                 passed=False,
-                reasoning=f"Insufficient financial history ({len(history)} years, need at least 3)"
+                reasoning="No financial history available"
             )
 
         # Compute quantitative trends

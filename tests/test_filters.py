@@ -417,19 +417,16 @@ class TestF4CapitalAllocation:
         return CapitalAllocationFilter(memory_db, financial_data, edgar)
 
     @pytest.mark.asyncio
-    async def test_insufficient_history_fails(self, memory_db):
-        """Fewer than 3 years of history => fail."""
+    async def test_no_history_fails(self, memory_db):
+        """Zero years of history => fail."""
         fin = MagicMock()
-        fin.get_financial_history.return_value = [
-            {"fiscal_year": 2024},
-            {"fiscal_year": 2023},
-        ]
+        fin.get_financial_history.return_value = []
         filt = self._make_filter(memory_db, financial_data=fin)
         company = _make_company()
 
         result = await filt.evaluate(company)
         assert result.passed is False
-        assert "insufficient" in result.reasoning.lower() or "2 years" in result.reasoning.lower()
+        assert "no financial history" in result.reasoning.lower()
 
     @pytest.mark.asyncio
     async def test_exactly_three_years_proceeds(self, memory_db):

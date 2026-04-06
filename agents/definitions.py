@@ -37,13 +37,22 @@ def _find_claude_cli() -> str:
     )
 
 
-async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Dict[str, Any]:
+def _is_transient_error(error_msg: str) -> bool:
+    """Check if an error is transient and worth retrying."""
+    lower = error_msg.lower()
+    return any(t in lower for t in (
+        "overloaded", "rate limit", "429", "too many requests",
+        "timeout", "connection", "503", "502", "500",
+    ))
+
+
+async def run_agent(prompt: str, user_message: str, model: str = "sonnet", max_retries: int = 2) -> Dict[str, Any]:
     """
     Run a Claude agent via the CLI in --print mode.
 
     Pipes the prompt via stdin, gets JSON output back. No SDK, no subprocess
     lifecycle bugs, no message parsing issues. Just like running claude from
-    a terminal.
+    a terminal. Retries on transient errors.
     """
     claude_path = _find_claude_cli()
     full_message = f"{prompt}\n\n---\n\nHere is the content to analyze:\n\n{user_message}"
@@ -59,38 +68,67 @@ async def run_agent(prompt: str, user_message: str, model: str = "sonnet") -> Di
         "--dangerously-skip-permissions",
     ]
 
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        stdout, stderr = await proc.communicate(input=full_message.encode("utf-8"))
-
-        if proc.returncode != 0:
-            stderr_text = stderr.decode("utf-8", errors="replace")[:500]
-            logger.error(f"claude CLI exited {proc.returncode}: {stderr_text}")
-            return {"error": f"CLI exit code {proc.returncode}: {stderr_text}"}
-
-        # Parse the JSON envelope from --output-format json
-        output = stdout.decode("utf-8").strip()
+    last_error = None
+    for attempt in range(1 + max_retries):
         try:
-            envelope = json.loads(output)
-        except json.JSONDecodeError:
-            # Might be plain text if --output-format json wasn't honored
-            return _extract_json(output)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
 
-        if envelope.get("is_error"):
-            return {"error": envelope.get("result", "Unknown CLI error")}
+            stdout, stderr = await proc.communicate(input=full_message.encode("utf-8"))
 
-        result_text = envelope.get("result", "")
-        return _extract_json(result_text)
+            if proc.returncode != 0:
+                stderr_text = stderr.decode("utf-8", errors="replace")[:500]
+                stdout_text = stdout.decode("utf-8", errors="replace")[:1000]
+                # --output-format json puts errors in stdout as JSON envelope
+                error_msg = ""
+                if stdout_text.strip():
+                    try:
+                        envelope = json.loads(stdout_text)
+                        error_msg = envelope.get("result", "")
+                    except json.JSONDecodeError:
+                        error_msg = stdout_text[:200]
+                if not error_msg:
+                    error_msg = stderr_text
+                last_error = error_msg or f"CLI exit code {proc.returncode}"
+                logger.warning(f"claude CLI attempt {attempt+1} exited {proc.returncode}: {last_error[:200]}")
+                if attempt < max_retries and _is_transient_error(last_error):
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                return {"error": last_error}
 
-    except Exception as e:
-        logger.error(f"Agent error: {e}")
-        return {"error": str(e)}
+            # Parse the JSON envelope from --output-format json
+            output = stdout.decode("utf-8").strip()
+            try:
+                envelope = json.loads(output)
+            except json.JSONDecodeError:
+                # Might be plain text if --output-format json wasn't honored
+                return _extract_json(output)
+
+            if envelope.get("is_error"):
+                error_msg = envelope.get("result", "Unknown CLI error")
+                last_error = error_msg
+                if attempt < max_retries and _is_transient_error(error_msg):
+                    logger.warning(f"CLI returned is_error on attempt {attempt+1}: {error_msg[:200]}")
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                return {"error": error_msg}
+
+            result_text = envelope.get("result", "")
+            return _extract_json(result_text)
+
+        except Exception as e:
+            last_error = str(e)
+            logger.warning(f"Agent attempt {attempt+1} error: {e}")
+            if attempt < max_retries:
+                await asyncio.sleep(2 ** attempt)
+                continue
+            return {"error": last_error}
+
+    return {"error": last_error or "All retries exhausted"}
 
 
 def _extract_json(text: str) -> Dict[str, Any]:
