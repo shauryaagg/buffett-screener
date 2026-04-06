@@ -63,7 +63,7 @@ async def run_agent(prompt: str, user_message: str, model: str = "sonnet", max_r
         "--print",
         "--model", model_id,
         "--output-format", "json",
-        "--max-turns", "1",
+        "--max-turns", "3",
         "--no-session-persistence",
         "--dangerously-skip-permissions",
     ]
