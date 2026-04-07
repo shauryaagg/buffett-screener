@@ -87,7 +87,7 @@ class CapitalAllocationFilter(FilterBase):
         return FilterResult(
             passed=passed,
             score=weighted,
-            reasoning=result.get("reasoning", "")[:2000],
+            reasoning=result.get("reasoning", ""),
             details={
                 "buyback_quality": scores.buyback_quality,
                 "capital_return": scores.capital_return,
