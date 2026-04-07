@@ -132,6 +132,8 @@ There is no single formula that works for all businesses. A bank is not valued t
 - The more durable the competitive advantage and the more room for reinvestment at high returns, the more the business is worth. This isn't a formula — it's judgment about the durability of economics.
 - Always think in terms of: "What would a knowledgeable private buyer pay for the entire business?" Not what the stock market says today, but what the business is actually worth as a going concern.
 
+You will NOT be given the current stock price. This is intentional — estimate what the business is worth as a private buyer without anchoring on the market price. Your intrinsic value estimate must come purely from the financials and business quality.
+
 Return your analysis as valid JSON in this exact format:
 {
     "business_type": "<type of business: bank, insurer, software, retailer, manufacturer, etc.>",
@@ -140,12 +142,10 @@ Return your analysis as valid JSON in this exact format:
     "moat_type": "<specific moat type for this business>",
     "moat_strength": <float 0-10>,
     "intrinsic_value_per_share": <float — your best single estimate>,
-    "current_price": <float>,
-    "margin_of_safety": <float — (intrinsic - price) / intrinsic>,
     "reasoning": "<detailed explanation of your valuation logic specific to this business>"
 }
 
-**The stock must be selling for less than 50% of your intrinsic value estimate to pass.** This is a massive margin of safety. It means you can be quite wrong and still do well. Be conservative in your estimate and demanding in your margin of safety."""
+Be conservative in your estimate. We will separately compare your intrinsic value against the market price to determine margin of safety."""
 
 CAPITAL_ALLOCATION_PROMPT = """You are evaluating 10 years of capital allocation decisions by this management team.
 

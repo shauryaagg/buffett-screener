@@ -58,8 +58,9 @@ class ValuationFilter(FilterBase):
         mda_text = sections.get("item_7", "")[:20000]
         business_context = f"Business Description:\n{business_desc}\n\nMD&A Highlights:\n{mda_text}"
 
-        # Format financial summary as text for the agent
-        fin_text = self._format_financial_summary(fin_summary, price)
+        # Format financial summary as text for the agent (price intentionally excluded
+        # so the LLM estimates intrinsic value without anchoring on market price)
+        fin_text = self._format_financial_summary(fin_summary)
 
         # Step 2: Run Opus valuation agent
         val_result = await run_valuation_analysis(fin_text, business_context)
@@ -78,11 +79,11 @@ class ValuationFilter(FilterBase):
                 return default
 
         intrinsic_value = safe_float(val_result.get("intrinsic_value_per_share"), 0.0)
-        margin_of_safety = safe_float(val_result.get("margin_of_safety"), 0.0)
         moat_type = val_result.get("moat_type", "unknown")
         moat_strength = safe_float(val_result.get("moat_strength"), 0.0)
 
-        # Recalculate margin of safety to be safe
+        # Margin of safety computed here, not by the LLM (which never sees the price)
+        margin_of_safety = 0.0
         if intrinsic_value > 0:
             margin_of_safety = (intrinsic_value - price) / intrinsic_value
 
@@ -114,10 +115,9 @@ class ValuationFilter(FilterBase):
             }
         )
 
-    def _format_financial_summary(self, summary: dict, current_price: float) -> str:
+    def _format_financial_summary(self, summary: dict) -> str:
         """Format financial data as readable text for the valuation agent."""
         lines = [f"Ticker: {summary['ticker']}"]
-        lines.append(f"Current Stock Price: ${current_price:.2f}")
         lines.append(f"Years of data: {summary['years_of_data']}")
 
         if summary.get("normalized_owner_earnings"):
